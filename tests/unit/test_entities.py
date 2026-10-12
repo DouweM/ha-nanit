@@ -39,6 +39,7 @@ class _PlaybackStateFallback:
 
 PlaybackState = getattr(_MODELS, "PlaybackState", _PlaybackStateFallback)
 
+# Imports the camera component, so it must follow the turbojpeg stub above.
 from homeassistant.components.camera import StreamType
 
 from custom_components.nanit.binary_sensor import (
@@ -455,6 +456,7 @@ async def test_camera_streams_over_hls_only() -> None:
         await entity.async_refresh_providers(write_state=False)
 
     find_provider.assert_not_awaited()
+    assert entity.webrtc_provider is None
     assert entity.camera_capabilities.frontend_stream_types == {StreamType.HLS}
 
 
