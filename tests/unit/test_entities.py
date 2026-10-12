@@ -39,6 +39,8 @@ class _PlaybackStateFallback:
 
 PlaybackState = getattr(_MODELS, "PlaybackState", _PlaybackStateFallback)
 
+from homeassistant.components.camera import StreamType
+
 from custom_components.nanit.binary_sensor import (
     BINARY_SENSORS,
     CLOUD_BINARY_SENSORS,
@@ -441,6 +443,19 @@ def test_camera_entity_is_on_true_when_sleep_mode_disabled() -> None:
     entity = NanitCameraEntity(coordinator, camera)
 
     assert entity.is_on is True
+
+
+async def test_camera_streams_over_hls_only() -> None:
+    """go2rtc crashes on Nanit's RTMPS feed, so no WebRTC provider is offered it."""
+    coordinator = _push_coordinator(_camera_state(sleep_mode=False))
+    entity = NanitCameraEntity(coordinator, MagicMock(uid="cam_1"))
+    find_provider = AsyncMock(return_value=MagicMock())
+
+    with patch("homeassistant.components.camera.async_get_supported_provider", find_provider):
+        await entity.async_refresh_providers(write_state=False)
+
+    find_provider.assert_not_awaited()
+    assert entity.camera_capabilities.frontend_stream_types == {StreamType.HLS}
 
 
 async def test_camera_stream_source_returns_url_when_on() -> None:

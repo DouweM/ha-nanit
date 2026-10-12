@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 from homeassistant.components.camera import Camera, CameraEntityFeature
@@ -202,6 +203,19 @@ class NanitCameraEntity(NanitEntity, Camera):
         stream_age = time.monotonic() - self._stream_source_started_at
         if stream_age >= _STREAM_SOURCE_MAX_AGE:
             self._refresh_or_expire_stream_source(f"stream source age {stream_age:.0f}s")
+
+    async def _async_get_supported_webrtc_provider[T](
+        self, fn: Callable[[HomeAssistant, Camera], Coroutine[None, None, T | None]]
+    ) -> T | None:
+        """Keep the camera off WebRTC providers, so it streams over HLS only.
+
+        go2rtc, the provider Home Assistant bundles, crashes on Nanit's RTMPS
+        feed: the cloud sends an empty RTMP message as the stream starts and
+        go2rtc's FLV reader indexes one byte past it (AlexxIT/go2rtc#2061).
+        A crash restarts go2rtc and drops every other camera's WebRTC session
+        with it. Home Assistant's own stream (PyAV) plays the same feed fine.
+        """
+        return None
 
     @callback
     def close_webrtc_session(self, session_id: str) -> None:
