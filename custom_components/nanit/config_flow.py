@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import ipaddress
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import voluptuous as vol
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -33,6 +32,15 @@ from .const import (
     is_read_only,
 )
 from .sanitize import display_name
+
+# Home Assistant types its flow schemas with probatio from 2026.10. At runtime
+# it has aliased voluptuous to probatio since 2026.9, and older versions ship
+# real voluptuous, so the import stays voluptuous and only the type checker
+# sees probatio.
+if TYPE_CHECKING:
+    import probatio as vol
+else:
+    import voluptuous as vol
 
 
 class NanitConfigFlow(ConfigFlow, domain=DOMAIN):
