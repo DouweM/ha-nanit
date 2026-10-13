@@ -23,6 +23,13 @@
       },
       "connectivity": {
         "default": "mdi:wifi"
+      },
+      "camera_power": {
+        "default": "mdi:power",
+        "state": {
+          "on": "mdi:power-plug",
+          "off": "mdi:power-plug-off"
+        }
       }
     },
     "switch": {

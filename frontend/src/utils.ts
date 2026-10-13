@@ -55,6 +55,8 @@ function assignEntities(result: NanitEntities, eids: string[], hass: HomeAssista
         result.motion = eid;
       } else if (deviceClass === "sound" || suffix.endsWith("_sound") || suffix.endsWith("_cloud_sound")) {
         result.sound = eid;
+      } else if (deviceClass === "power" || suffix.endsWith("_camera_power")) {
+        result.power_state = eid;
       }
     } else if (domain === "switch" && suffix.endsWith("_camera_power")) {
       result.power = eid;

@@ -39,6 +39,8 @@ export interface NanitCardConfig {
 export interface NanitEntities {
   camera?: string;
   power?: string;
+  // Read-only mode: the camera power binary_sensor that stands in for `power`.
+  power_state?: string;
   temperature?: string;
   humidity?: string;
   light?: string;

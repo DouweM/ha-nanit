@@ -11,16 +11,17 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
-from homeassistant.const import EntityCategory
+from homeassistant.const import STATE_OFF, STATE_ON, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from aionanit.models import CameraState, CloudEvent, ConnectionState
 
 from . import NanitConfigEntry
-from .const import CLOUD_EVENT_WINDOW
+from .const import CLOUD_EVENT_WINDOW, is_read_only
 from .coordinator import NanitCloudCoordinator, NanitPushCoordinator, NanitSoundLightCoordinator
-from .entity import NanitCloudEntity, NanitEntity, NanitSoundLightEntity
+from .entity import NanitCloudEntity, NanitEntity, NanitSoundLightEntity, camera_power_on
 
 PARALLEL_UPDATES = 0
 
@@ -82,9 +83,14 @@ async def async_setup_entry(
     """Set up Nanit binary sensors for all devices on the account."""
     entities: list[BinarySensorEntity] = []
 
+    read_only = is_read_only(entry)
     for cam_data in entry.runtime_data.cameras.values():
         for push_desc in BINARY_SENSORS:
             entities.append(NanitBinarySensor(cam_data.push_coordinator, push_desc))
+
+        # Read-only mode has no power switch; this sensor shows its state instead.
+        if read_only:
+            entities.append(NanitCameraPowerSensor(cam_data.push_coordinator))
 
         if cam_data.cloud_coordinator is not None:
             for cloud_desc in CLOUD_BINARY_SENSORS:
@@ -139,6 +145,44 @@ class NanitBinarySensor(NanitEntity, BinarySensorEntity):
         if self.entity_description.key == "connectivity":
             return bool(self.coordinator.connected)
         return self.entity_description.value_fn(self.coordinator.data)
+
+
+class NanitCameraPowerSensor(NanitEntity, RestoreEntity, BinarySensorEntity):
+    """Camera power (on = awake, off = asleep), read-only mode only.
+
+    Stands in for the camera power switch, which read-only mode removes. It
+    follows the switch's state rules: the same value, the last known value
+    kept while the camera reports none, and restored on startup.
+    """
+
+    _attr_translation_key = "camera_power"
+    _attr_device_class = BinarySensorDeviceClass.POWER
+
+    def __init__(self, coordinator: NanitPushCoordinator) -> None:
+        """Initialize."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.camera.uid}_camera_power"
+        self._attr_is_on = (
+            camera_power_on(coordinator.data) if coordinator.data is not None else None
+        )
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the last known state if the camera hasn't reported one yet."""
+        await super().async_added_to_hass()
+        if (
+            self._attr_is_on is None
+            and (last_state := await self.async_get_last_state()) is not None
+            and last_state.state in (STATE_ON, STATE_OFF)
+        ):
+            self._attr_is_on = last_state.state == STATE_ON
+
+    def _handle_coordinator_update(self) -> None:
+        """Take the camera's power state; keep the last known one if it has none."""
+        if self.coordinator.data is not None:
+            new_value = camera_power_on(self.coordinator.data)
+            if new_value is not None:
+                self._attr_is_on = new_value
+        self.async_write_ha_state()
 
 
 class NanitCloudBinarySensor(NanitCloudEntity, BinarySensorEntity):

@@ -8,6 +8,8 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from aionanit.models import CameraState
+
 from .const import DOMAIN
 from .coordinator import (
     NanitCloudCoordinator,
@@ -17,6 +19,16 @@ from .coordinator import (
 )
 from .device_links import HAS_DEVICE_ID_LINKS, async_get_device
 from .sanitize import display_name, speaker_display_name
+
+
+def camera_power_on(state: CameraState) -> bool | None:
+    """Return whether the camera is on (not in sleep mode), or None if unknown.
+
+    The camera power switch and the read-only camera power sensor both use
+    this, so the two always mean the same thing.
+    """
+    sleep_mode = state.settings.sleep_mode
+    return None if sleep_mode is None else not sleep_mode
 
 
 class NanitEntity(CoordinatorEntity[NanitPushCoordinator]):

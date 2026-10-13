@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -14,14 +15,16 @@ _ = sys.modules.setdefault("turbojpeg", MagicMock(TurboJPEG=MagicMock()))
 
 from homeassistant.components.camera import CameraEntityFeature
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, STATE_OFF, STATE_ON, Platform
+from homeassistant.core import HomeAssistant, State
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.nanit import async_setup_entry, async_unload_entry
+from custom_components.nanit.binary_sensor import NanitCameraPowerSensor
 from custom_components.nanit.camera import NanitCameraEntity
 from custom_components.nanit.const import (
     CONF_CAMERA_IP,
@@ -31,6 +34,8 @@ from custom_components.nanit.const import (
     PLATFORMS,
     READ_ONLY_PLATFORMS,
 )
+from custom_components.nanit.entity import camera_power_on
+from custom_components.nanit.switch import SWITCHES
 
 from .conftest import MOCK_BABY_1, MOCK_EMAIL, MOCK_PASSWORD, mock_entry_data_v2
 from .test_via_device_e2e import camera_fails, nanit_env  # noqa: F401  (shared fixtures)
@@ -199,6 +204,73 @@ async def test_default_setup_keeps_control_entities(
     assert ent_reg.async_get(switch.entity_id) is not None
 
 
+async def test_default_setup_removes_the_read_only_power_sensor(
+    hass: HomeAssistant,
+    mock_nanit_client,
+) -> None:
+    """Turning read-only off: the stand-in sensor goes, the power switch stays."""
+    entry = _entry(read_only=False)
+    entry.add_to_hass(hass)
+
+    ent_reg = er.async_get(hass)
+    uid = MOCK_BABY_1.camera_uid
+    sensor = ent_reg.async_get_or_create(
+        "binary_sensor", DOMAIN, f"{uid}_camera_power", config_entry=entry
+    )
+    kept = [
+        ent_reg.async_get_or_create("switch", DOMAIN, f"{uid}_camera_power", config_entry=entry),
+        ent_reg.async_get_or_create("binary_sensor", DOMAIN, f"{uid}_motion", config_entry=entry),
+    ]
+    # Another Nanit account that is still read-only keeps its sensor.
+    other_account = MockConfigEntry(
+        domain=DOMAIN,
+        data=mock_entry_data_v2(),
+        options={CONF_READ_ONLY: True},
+        unique_id="other@x",
+    )
+    other_account.add_to_hass(hass)
+    # Another integration's binary sensor, even with the same unique ID, is never swept.
+    other_integration = MockConfigEntry(domain="hue")
+    other_integration.add_to_hass(hass)
+    foreign = [
+        ent_reg.async_get_or_create(
+            "binary_sensor", DOMAIN, "other_cam_camera_power", config_entry=other_account
+        ),
+        ent_reg.async_get_or_create(
+            "binary_sensor", "hue", f"{uid}_camera_power", config_entry=other_integration
+        ),
+    ]
+
+    with patch.object(
+        hass.config_entries, "async_forward_entry_setups", AsyncMock(return_value=True)
+    ):
+        assert await async_setup_entry(hass, entry)
+
+    assert ent_reg.async_get(sensor.entity_id) is None
+    for reg_entry in [*kept, *foreign]:
+        assert ent_reg.async_get(reg_entry.entity_id) is not None
+
+
+async def test_read_only_setup_keeps_the_power_sensor(
+    hass: HomeAssistant,
+    mock_nanit_client,
+) -> None:
+    entry = _entry(read_only=True)
+    entry.add_to_hass(hass)
+
+    ent_reg = er.async_get(hass)
+    sensor = ent_reg.async_get_or_create(
+        "binary_sensor", DOMAIN, f"{MOCK_BABY_1.camera_uid}_camera_power", config_entry=entry
+    )
+
+    with patch.object(
+        hass.config_entries, "async_forward_entry_setups", AsyncMock(return_value=True)
+    ):
+        assert await async_setup_entry(hass, entry)
+
+    assert ent_reg.async_get(sensor.entity_id) is not None
+
+
 def test_read_only_platforms_cannot_control_a_device() -> None:
     assert set(READ_ONLY_PLATFORMS) == {Platform.SENSOR, Platform.BINARY_SENSOR, Platform.CAMERA}
     assert set(READ_ONLY_PLATFORMS) < set(PLATFORMS)
@@ -236,6 +308,110 @@ async def test_default_camera_turn_off_still_sleeps() -> None:
     with patch.object(entity, "_invalidate_stream"):
         await entity.async_turn_off()
     camera.async_set_settings.assert_awaited_once_with(sleep_mode=True)
+
+
+# ---------------------------------------------------------------------------
+# Camera power sensor (stands in for the power switch)
+# ---------------------------------------------------------------------------
+
+
+def _state(sleep_mode: bool | None) -> SimpleNamespace:
+    return SimpleNamespace(settings=SimpleNamespace(sleep_mode=sleep_mode))
+
+
+def _power_sensor(sleep_mode: bool | None = None, *, data: bool = True) -> NanitCameraPowerSensor:
+    coordinator = MagicMock()
+    coordinator.data = _state(sleep_mode) if data else None
+    coordinator.camera = MagicMock(uid="cam_1", baby_uid="baby_1")
+    coordinator.baby = MOCK_BABY_1
+    return NanitCameraPowerSensor(coordinator)
+
+
+def test_power_sensor_uses_the_switch_value() -> None:
+    """One function decides both, so the sensor means exactly what the switch means."""
+    assert SWITCHES[0].key == "camera_power"
+    assert SWITCHES[0].value_fn is camera_power_on
+
+
+@pytest.mark.parametrize(("sleep_mode", "expected"), [(False, True), (True, False), (None, None)])
+def test_power_sensor_state(sleep_mode: bool | None, expected: bool | None) -> None:
+    sensor = _power_sensor(sleep_mode)
+    assert sensor.is_on is expected
+    assert sensor.unique_id == "cam_1_camera_power"
+    assert sensor.device_class == "power"
+
+
+def test_power_sensor_follows_updates_and_keeps_the_last_known_state() -> None:
+    sensor = _power_sensor(False)
+    with patch.object(sensor, "async_write_ha_state"):
+        sensor.coordinator.data = _state(True)
+        sensor._handle_coordinator_update()
+        assert sensor.is_on is False
+
+        # The camera reports no sleep_mode: keep the last known state, as the switch does.
+        sensor.coordinator.data = _state(None)
+        sensor._handle_coordinator_update()
+        assert sensor.is_on is False
+
+        sensor.coordinator.data = _state(False)
+        sensor._handle_coordinator_update()
+        assert sensor.is_on is True
+
+
+@pytest.mark.parametrize(
+    ("last", "expected"), [(STATE_ON, True), (STATE_OFF, False), ("unavailable", None)]
+)
+async def test_power_sensor_restores_only_on_or_off(last: str, expected: bool | None) -> None:
+    sensor = _power_sensor(data=False)
+    with (
+        patch.object(CoordinatorEntity, "async_added_to_hass", AsyncMock()),
+        patch.object(
+            sensor,
+            "async_get_last_state",
+            AsyncMock(return_value=State("binary_sensor.x_camera_power", last)),
+        ),
+    ):
+        await sensor.async_added_to_hass()
+    assert sensor.is_on is expected
+
+
+async def test_power_sensor_prefers_live_data_over_the_restored_state() -> None:
+    sensor = _power_sensor(False)
+    with (
+        patch.object(CoordinatorEntity, "async_added_to_hass", AsyncMock()),
+        patch.object(
+            sensor,
+            "async_get_last_state",
+            AsyncMock(return_value=State("binary_sensor.x_camera_power", STATE_OFF)),
+        ),
+    ):
+        await sensor.async_added_to_hass()
+    assert sensor.is_on is True
+
+
+# ---------------------------------------------------------------------------
+# Dashboard card: "Camera Off" from the power sensor
+# ---------------------------------------------------------------------------
+
+_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_card_falls_back_to_the_power_sensor() -> None:
+    utils = (_ROOT / "frontend" / "src" / "utils.ts").read_text(encoding="utf-8")
+    card = (_ROOT / "frontend" / "src" / "nanit-card.ts").read_text(encoding="utf-8")
+    bundle = (_ROOT / "custom_components" / "nanit" / "frontend" / "nanit-card.js").read_text(
+        encoding="utf-8"
+    )
+
+    # the condition itself, so swapping it for `false` fails here
+    assert (
+        '} else if (deviceClass === "power" || suffix.endsWith("_camera_power")) {\n'
+        "        result.power_state = eid;"
+    ) in utils
+    assert "entities.power ?? entities.power_state" in card
+    # the power button still needs the switch: read-only mode shows no button
+    assert "const showPowerButton = entities.power &&" in card
+    assert "power_state" in bundle
 
 
 # ---------------------------------------------------------------------------
@@ -361,9 +537,27 @@ async def test_read_only_toggle_end_to_end(hass: HomeAssistant, nanit_env) -> No
     def ours() -> dict[str, er.RegistryEntry]:
         return {e.entity_id: e for e in er.async_entries_for_config_entry(ent_reg, entry.entry_id)}
 
+    def power_sensor() -> str | None:
+        return next(
+            (
+                eid
+                for eid, e in ours().items()
+                if e.domain == "binary_sensor" and e.unique_id.endswith("_camera_power")
+            ),
+            None,
+        )
+
     before = ours()
     control = {eid for eid, e in before.items() if e.domain not in observe}
     assert control, "a full setup creates control entities"
+    assert power_sensor() is None, "the power sensor is read-only mode only"
+    power_switch = next(
+        eid
+        for eid, e in before.items()
+        if e.domain == "switch" and e.unique_id.endswith("_camera_power")
+    )
+    switch_state = hass.states.get(power_switch).state
+    assert switch_state == STATE_ON
     camera_id = next(eid for eid, e in before.items() if e.domain == "camera")
     features = hass.states.get(camera_id).attributes["supported_features"]
     assert features & CameraEntityFeature.ON_OFF
@@ -373,6 +567,9 @@ async def test_read_only_toggle_end_to_end(hass: HomeAssistant, nanit_env) -> No
 
     assert entry.state is ConfigEntryState.LOADED
     assert not control & set(ours())
+    sensor_id = power_sensor()
+    assert sensor_id is not None
+    assert hass.states.get(sensor_id).state == switch_state, "same meaning as the switch"
     features = hass.states.get(camera_id).attributes["supported_features"]
     assert features == CameraEntityFeature.STREAM
     with pytest.raises(ServiceValidationError):
@@ -385,6 +582,7 @@ async def test_read_only_toggle_end_to_end(hass: HomeAssistant, nanit_env) -> No
 
     assert entry.state is ConfigEntryState.LOADED
     assert control <= set(ours()), "the same entity IDs come back"
+    assert power_sensor() is None, "the power sensor goes when the switch is back"
     features = hass.states.get(camera_id).attributes["supported_features"]
     assert features & CameraEntityFeature.ON_OFF
 

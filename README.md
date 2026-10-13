@@ -78,8 +78,9 @@ Turn on **Read-only mode** during setup, or later under **Settings → Devices &
 - You get the camera stream, temperature and humidity, and motion and sound detection. (Viewing the stream still asks the camera to stream, as it always does.)
 - There are no switches, lights, numbers, selects or media players. Nothing in Home Assistant (dashboards, automations, scripts or a voice assistant) can put the camera to sleep, change the night light or volume, or control a Sound & Light Machine.
 - The camera has no on/off. A direct `camera.turn_off` or `camera.turn_on` call is refused.
+- A read-only **Camera Power** binary sensor (on = awake, off = asleep) takes the place of the power switch, so you can still see, and automate on, whether the camera is asleep. It exists only in this mode.
 
-Turning it on removes the control entities, so **automations and scripts that use them stop working** while it's on. Turning it off brings them back with the same names and entity IDs, so those automations work again. The dashboard card stays available, but its controls do nothing in this mode. The setting applies to every device on the account.
+Turning it on removes the control entities, so **automations and scripts that use them stop working** while it's on. Turning it off brings them back with the same names and entity IDs, so those automations work again. **Turning it off also removes the Camera Power sensor, so automations that use it stop working**; switch them to the power switch. The dashboard card stays available and still shows "Camera Off" while the camera is asleep, but its controls do nothing in this mode. The setting applies to every device on the account.
 
 ## Dashboard Card
 

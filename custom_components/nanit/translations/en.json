@@ -190,6 +190,9 @@
       },
       "sl_connectivity": {
         "name": "Connectivity"
+      },
+      "camera_power": {
+        "name": "Camera Power"
       }
     },
     "switch": {

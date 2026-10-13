@@ -87,11 +87,13 @@ export class NanitCard extends LitElement {
   }
 
   private _isCameraOn(entities: NanitEntities): boolean {
-    if (!entities.power) return true;
+    // Read-only mode has no power switch, only the camera power sensor.
+    const power = entities.power ?? entities.power_state;
+    if (!power) return true;
     // Unknown/unavailable control state is not an intentional power-off.
     // Keep the stream mounted so a reconnect can recover it; only an explicit
     // `off` state should collapse the card and show "Camera Off".
-    return this.hass.states[entities.power]?.state !== "off";
+    return this.hass.states[power]?.state !== "off";
   }
 
   private _fireMoreInfo(entityId: string): void {

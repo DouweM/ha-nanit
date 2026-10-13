@@ -22,7 +22,7 @@ from . import NanitConfigEntry
 from .aionanit_sl.exceptions import NanitTransportError
 from .const import DOMAIN
 from .coordinator import NanitPushCoordinator, NanitSoundLightCoordinator
-from .entity import NanitEntity, NanitSoundLightEntity
+from .entity import NanitEntity, NanitSoundLightEntity, camera_power_on
 
 PARALLEL_UPDATES = 0
 
@@ -50,9 +50,7 @@ SWITCHES: tuple[NanitSwitchEntityDescription, ...] = (
         icon="mdi:power",
         entity_registry_enabled_default=True,
         device_class=SwitchDeviceClass.SWITCH,
-        value_fn=lambda state: (
-            not state.settings.sleep_mode if state.settings.sleep_mode is not None else None
-        ),
+        value_fn=camera_power_on,
         turn_on_fn=lambda cam: cam.async_set_settings(sleep_mode=False),
         turn_off_fn=lambda cam: cam.async_set_settings(sleep_mode=True),
     ),
