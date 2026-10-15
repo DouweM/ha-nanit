@@ -178,6 +178,8 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     unique_id = email (account-level).
     v2.2 drops password persistence: any stored password is scrubbed from
     entry.data (it was never read by anything — reauth always prompts).
+    v2.3 drops the camera IP option: any saved camera IPs are removed from
+    options (#176).
     """
     LOGGER.debug("Migrating Nanit config entry from version %s", config_entry.version)
 
@@ -221,6 +223,15 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         new_data.pop(CONF_STORE_CREDENTIALS, None)
         hass.config_entries.async_update_entry(config_entry, data=new_data, minor_version=2)
         LOGGER.info("Migrated Nanit config entry to version 2.2 (stored password removed)")
+
+    if config_entry.version == 2 and config_entry.minor_version < 3:
+        # The camera IP option is gone (#176): current firmware rejects the
+        # integration's token on the camera's local socket, so a saved IP only
+        # kept a probe retrying the 403 every 5 minutes. Speaker IPs stay.
+        new_options = {**config_entry.options}
+        new_options.pop(CONF_CAMERA_IPS, None)
+        hass.config_entries.async_update_entry(config_entry, options=new_options, minor_version=3)
+        LOGGER.info("Migrated Nanit config entry to version 2.3 (camera IP option removed)")
 
     return True
 
@@ -568,7 +579,7 @@ def _make_options_update_listener(
     HA fires update_listener for any entry mutation (data or options). Token
     refresh persists new tokens via async_update_entry(data=...) — this must
     not cause a reload. By comparing against a snapshot of the previous options,
-    we ensure only genuine options changes (e.g. camera IP updates) reload.
+    we ensure only genuine options changes (e.g. speaker IP updates) reload.
     """
 
     async def _listener(hass: HomeAssistant, entry: NanitConfigEntry) -> None:

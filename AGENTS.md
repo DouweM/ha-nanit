@@ -48,7 +48,7 @@ docs/                      ← Security checklist, connection reliability, testi
 |------|---------|
 | `__init__.py` | Entry setup/unload/migrate, `NanitData` dataclass |
 | `hub.py` | `NanitHub` lifecycle, `CameraData` per-camera grouping |
-| `config_flow.py` | Credentials + MFA, reauth, per-camera IP options |
+| `config_flow.py` | Credentials + MFA, reauth, options (Sound & Light IP, read-only) |
 | `coordinator.py` | `NanitPushCoordinator` (WebSocket push) + `NanitCloudCoordinator` (polling) |
 | `entity.py` | `NanitEntity` base class with availability logic |
 | `camera.py`, `sensor.py`, `binary_sensor.py`, `switch.py`, `number.py` | Entity platforms |
@@ -175,7 +175,7 @@ Full checklist: [`docs/SECURITY_AUDIT_CHECKLIST.md`](docs/SECURITY_AUDIT_CHECKLI
 
 Follow [Home Assistant developer docs](https://developers.home-assistant.io/) (latest version). Minimum HA: **2025.12+**.
 
-- **Config flow**: Credentials → MFA → reauth support. Options flow for per-camera settings.
+- **Config flow**: Credentials → MFA → reauth support. Options flow for Sound & Light IPs and read-only mode.
 - **Runtime data**: Use `ConfigEntry.runtime_data` (typed as `NanitData`) — not `hass.data`.
 - **Push coordinator**: `DataUpdateCoordinator.async_set_updated_data()` for WebSocket push data. Do NOT poll.
 - **Polling coordinator**: `DataUpdateCoordinator` with `update_interval` for cloud events.

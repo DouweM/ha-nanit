@@ -47,8 +47,7 @@
       "already_configured": "This Nanit account is already configured",
       "already_in_progress": "Configuration flow is already in progress",
       "reauth_successful": "Re-authentication successful",
-      "reauth_email_mismatch": "The email address does not match the original account. Please use the same email.",
-      "no_cameras": "No devices found on this Nanit account"
+      "reauth_email_mismatch": "The email address does not match the original account. Please use the same email."
     }
   },
   "options": {
@@ -56,22 +55,21 @@
       "init": {
         "title": "Nanit Options",
         "menu_options": {
-          "device": "Device IP addresses",
+          "device": "Sound & Light IP address",
           "read_only": "Read-only mode"
         }
       },
       "device": {
         "title": "Nanit Options",
-        "description": "Select a device to configure its local IP addresses.",
+        "description": "Select whose Sound & Light Machine to configure.",
         "data": {
-          "device": "Device"
+          "device": "Baby"
         }
       },
       "camera_ip": {
-        "title": "Device IPs for {camera_name}",
-        "description": "Enter local IP addresses for **{camera_name}** for local-first connectivity. Leave blank to use cloud only.",
+        "title": "Sound & Light IP for {camera_name}",
+        "description": "Enter the local IP address of **{camera_name}**'s Sound & Light Machine to use it over your network. Leave blank to find it automatically.",
         "data": {
-          "camera_ip": "Camera IP Address",
           "speaker_ip": "Sound & Light Machine IP Address"
         }
       },
@@ -82,6 +80,12 @@
           "read_only": "Read-only mode"
         }
       }
+    },
+    "error": {
+      "invalid_ip": "Invalid IP address"
+    },
+    "abort": {
+      "no_speakers": "This account has no Sound & Light Machine paired with a baby. Unpaired machines are found automatically and need no address."
     }
   },
   "exceptions": {
