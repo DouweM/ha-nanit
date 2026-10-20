@@ -267,6 +267,40 @@ class TestParseSensorData:
         result = _parse_sensor_data(data, SensorState())
         assert result.humidity == 55.0
 
+    @pytest.mark.parametrize("sensor_type", [ProtoSensorType.TEMPERATURE, ProtoSensorType.HUMIDITY])
+    @pytest.mark.parametrize(
+        "reading", [{"value_milli": -1_000_000}, {"value": -1000}], ids=["milli", "value"]
+    )
+    def test_no_reading_clears_value(
+        self, sensor_type: ProtoSensorType, reading: dict[str, int]
+    ) -> None:
+        existing = SensorState(temperature=22.0, humidity=40.0)
+        data = [SensorData(sensor_type=sensor_type, **reading)]
+        result = _parse_sensor_data(data, existing)
+        if sensor_type == ProtoSensorType.TEMPERATURE:
+            assert result.temperature is None
+            assert result.humidity == 40.0
+        else:
+            assert result.humidity is None
+            assert result.temperature == 22.0
+
+    def test_reading_after_no_reading(self) -> None:
+        no_reading = [SensorData(sensor_type=ProtoSensorType.TEMPERATURE, value_milli=-1_000_000)]
+        state = _parse_sensor_data(no_reading, SensorState(temperature=22.0))
+        assert state.temperature is None
+        reading = [SensorData(sensor_type=ProtoSensorType.TEMPERATURE, value_milli=23500)]
+        assert _parse_sensor_data(reading, state).temperature == 23.5
+
+    def test_empty_reading_keeps_value(self) -> None:
+        existing = SensorState(temperature=22.0, humidity=40.0)
+        data = [
+            SensorData(sensor_type=ProtoSensorType.TEMPERATURE),
+            SensorData(sensor_type=ProtoSensorType.HUMIDITY, value_milli=0, value=0),
+        ]
+        result = _parse_sensor_data(data, existing)
+        assert result.temperature == 22.0
+        assert result.humidity == 40.0
+
     def test_parses_light(self) -> None:
         data = [SensorData(sensor_type=ProtoSensorType.LIGHT, value=120)]
         result = _parse_sensor_data(data, SensorState())

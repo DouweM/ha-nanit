@@ -29,6 +29,20 @@ _MOUNTING_MODE_MAP: dict[int, str] = {
     MountingMode.SWITCH: "switch",
 }
 
+# What a camera sends for temperature or humidity when it has no reading (the
+# Nanit app shows "--"): -1000, as value_milli or as value.
+_NO_READING_MILLI = -1_000_000
+_NO_READING = -1000
+
+
+def _parse_reading(sd: SensorData, current: float | None) -> float | None:
+    """Return a temperature or humidity reading, or None if the camera has none."""
+    if sd.value_milli:
+        return None if sd.value_milli == _NO_READING_MILLI else sd.value_milli / 1000.0
+    if sd.value:
+        return None if sd.value == _NO_READING else float(sd.value)
+    return current
+
 
 def _parse_sensor_data(
     sensor_data_list: list[SensorData],
@@ -45,15 +59,9 @@ def _parse_sensor_data(
 
     for sd in sensor_data_list:
         if sd.sensor_type == ProtoSensorType.TEMPERATURE:
-            if sd.value_milli:
-                temperature = sd.value_milli / 1000.0
-            elif sd.value:
-                temperature = float(sd.value)
+            temperature = _parse_reading(sd, temperature)
         elif sd.sensor_type == ProtoSensorType.HUMIDITY:
-            if sd.value_milli:
-                humidity = sd.value_milli / 1000.0
-            elif sd.value:
-                humidity = float(sd.value)
+            humidity = _parse_reading(sd, humidity)
         elif sd.sensor_type == ProtoSensorType.LIGHT:
             light = sd.value
         elif sd.sensor_type == ProtoSensorType.SOUND:
