@@ -18,6 +18,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from aionanit.exceptions import NanitAuthError, NanitConnectionError
 
+from . import aionanit_no_reading  # noqa: F401  (patches aionanit's parser)
 from .const import (
     CONF_BABY_NAME,
     CONF_BABY_UID,
