@@ -1216,3 +1216,29 @@ async def test_camera_start_streaming_safe_does_not_restart_shared_camera() -> N
     assert camera.async_start_streaming.await_count == 3
     camera.async_stop.assert_not_awaited()
     camera.async_start.assert_not_awaited()
+
+
+async def test_camera_still_comes_from_the_stream_when_the_cloud_has_none(
+    hass: HomeAssistant,
+) -> None:
+    """Nanit's cloud snapshot 404s for some cameras; HA's running stream has the last keyframe."""
+    entity = NanitCameraEntity(
+        _push_coordinator(_camera_state(sleep_mode=False)),
+        MagicMock(uid="cam_1", async_get_snapshot=AsyncMock(return_value=None)),
+    )
+    entity.hass = await _resolve_hass(hass)
+    entity.stream = MagicMock(async_get_image=AsyncMock(return_value=b"jpeg"))
+
+    assert await entity.async_camera_image(320, 180) == b"jpeg"
+    entity.stream.async_get_image.assert_awaited_once_with(320, 180)
+
+
+async def test_camera_still_never_starts_a_stream(hass: HomeAssistant) -> None:
+    entity = NanitCameraEntity(
+        _push_coordinator(_camera_state(sleep_mode=False)),
+        MagicMock(uid="cam_1", async_get_snapshot=AsyncMock(return_value=None)),
+    )
+    entity.hass = await _resolve_hass(hass)
+    entity.stream = None
+
+    assert await entity.async_camera_image() is None

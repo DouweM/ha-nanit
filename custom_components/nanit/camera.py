@@ -545,6 +545,17 @@ class NanitCameraEntity(NanitEntity, Camera):
         if fresh is not None:
             return fresh
 
+        # Nanit's cloud snapshot 404s for some cameras, which leaves the
+        # dashboard tile blank until video plays and notifications without a
+        # picture. HA's own stream keeps the last keyframe it decoded; use it
+        # when there is a stream already (preload_stream keeps one running), so
+        # a still request never starts the cloud push on its own.
+        if self._cached_snapshot is None and self.stream is not None:
+            try:
+                return await self.stream.async_get_image(width, height)
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("No still from the stream for %s", self._camera.uid)
+
         return self._cached_snapshot
 
     async def _async_refresh_snapshot(self) -> None:
